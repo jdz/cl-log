@@ -66,6 +66,11 @@
 
 ;; 3.  LOG-MANAGER
 
+(defconstant +timestamp-fraction-units-per-second+
+  ;; gettimeofday is used on SBCL and CCL.
+  #+(or sbcl ccl) 6
+  #-(or sbcl ccl) internal-time-units-per-second)
+
 (defclass log-object ()
   ())
 
@@ -77,6 +82,7 @@
    (category-set    :accessor log-manager-category-set  :initarg :categories)
    (category-cache  :reader   category-cache            :initform nil)
    (cache-version   :accessor cache-version)
+   #-(or sbcl ccl)
    (first-time      :reader   log-manager-first-time    :initform (first-time-for-log-manager))))
 
 (defvar *log-manager* nil)
@@ -93,9 +99,10 @@
             (make-instance 'category-set)))) ;; for the first log manager.
   (invalidate-log-manager self))
 
+#-(or sbcl ccl)
 (defun first-time-for-log-manager ()
   (- (* (get-universal-time)
-        internal-time-units-per-second)
+        +timestamp-fraction-units-per-second+)
      (get-internal-real-time)))
 
 (defmethod logging-disabled ((self log-manager))
@@ -157,30 +164,52 @@
 
 ;; 4.  MESSAGE
 
-;; Warning: the fraction will be self-consistent but not externally consistent: the fraction
-;; won't be zero when the univeral-time changes. (If we wanted this we'd have to wait for it,
-;; and we still might not get to it spot-on.)
+;; Warning: the fraction will be self-consistent but not externally
+;; consistent: the fraction won't be zero when the univeral-time
+;; changes. (If we wanted this we'd have to wait for it, and we still
+;; might not get to it spot-on.)
 
 (defstruct (timestamp
             (:constructor construct-timestamp (universal-time fraction)))
-  (universal-time nil :read-only t)
-  (fraction       nil :read-only t))
+  (universal-time (error "TIMESTAMP-UNIVERSAL-TIME slot is mandatory.")
+   :read-only t
+   :type unsigned-byte)
+  (fraction (error "TIMESTAMP-FRACTION slot is mandatory.")
+   :read-only t
+   :type (unsigned-byte 31)))
 
+#-(or sbcl ccl)
 (defun make-timestamp (log-manager)
   (let* ((first-time (log-manager-first-time log-manager))
          (this-time (+ first-time (get-internal-real-time))))
     (multiple-value-bind (univeral-time fraction)
-        (floor this-time internal-time-units-per-second)
+        (floor this-time +timestamp-fraction-units-per-second+)
       (construct-timestamp univeral-time fraction))))
+
+#+sbcl
+(defun make-timestamp (log-manager)
+  (declare (ignore log-manager))
+  (multiple-value-bind (sec usec)
+      (sb-ext:get-time-of-day)
+    (construct-timestamp (+ sec 2208988800) usec)))
+
+#+ccl
+(defun make-timestamp (log-manager)
+  (declare (ignore log-manager))
+  (ccl:rlet ((tv :timeval))
+    (ccl::gettimeofday tv)
+    (construct-timestamp (+ (ccl:pref tv :timeval.tv_sec) 2208988800)
+                         (ccl:pref tv :timeval.tv_usec))))
 
 (defmethod print-object ((self timestamp) stream)
   (if *print-escape*
       (print-unreadable-object (self stream :type t :identity t)
         (let ((*print-escape* nil))
           (print-object self stream)))
-    (format stream #.(format nil "~~d.~~~d,'0d" (ceiling (log internal-time-units-per-second 10)))
-            (timestamp-universal-time self)
-            (timestamp-fraction self))))
+      (format stream "~D.~V,'0D"
+              (timestamp-universal-time self)
+              (ceiling (log +timestamp-fraction-units-per-second+ 10))
+              (timestamp-fraction self))))
 
 (defclass base-message (log-object)
   ((id          :reader message-id          ) ; see initialize-instance

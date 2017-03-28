@@ -30,6 +30,7 @@
    "WITH-LOG-MANAGER-DISABLED"          ; macro, disables this manager while in lexical scope -- be careful about using this in tandem with (setf logging-disabled)
    "INVALIDATE-LOG-MANAGER"             ; this is called when categories or messengers are changed. you might want to write :after methods on this
    ;; timestamp
+   "+TIMESTAMP-FRACTION-UNITS-PER-SECOND+"
    "TIMESTAMP"
    "MAKE-TIMESTAMP"                     ; (make-timestamp (log-manager)) if you ever wanted a timestamp of your own to take home and play with
    "TIMESTAMP-UNIVERSAL-TIME"           ; universal-time at which timestamp was created
