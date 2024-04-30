@@ -10,3 +10,10 @@
     :components ((:file "pkg")
                  (:file "cl-log" :depends-on ("pkg"))))
 
+
+(defsystem "cl-log/syslog"
+  :description "syslog distination for cl-log"
+  :author "Jānis Džeriņš <lisp@jonis.lv>"
+  :license "Zlib"
+  :depends-on ("cl-log")
+  :components ((:file "syslog")))
